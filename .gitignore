@@ -1,0 +1,6 @@
+target/
+.DS_Store
+*.class
+*.jar
+.env
+.mvn/wrapper/maven-wrapper.jar
