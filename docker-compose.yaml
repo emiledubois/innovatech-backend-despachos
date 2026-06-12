@@ -1,0 +1,67 @@
+
+
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: innovatech-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${DB_NAME:-innovatech}
+      MYSQL_USER: ${DB_USERNAME:-appuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-rootpass}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - backend-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend-despachos:
+    build: .
+    container_name: innovatech-backend-despachos
+    restart: unless-stopped
+    environment:
+      DB_ENDPOINT: mysql-db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-innovatech}
+      DB_USERNAME: ${DB_USERNAME:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpass}
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - backend-net
+
+  backend-ventas:
+    image: ${ECR_REGISTRY:-placeholder}/innovatech-backend-ventas:latest
+    container_name: innovatech-backend-ventas
+    restart: unless-stopped
+    environment:
+      DB_ENDPOINT: mysql-db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-innovatech}
+      DB_USERNAME: ${DB_USERNAME:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpass}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - backend-net
+
+volumes:
+  mysql_data:
+    name: innovatech_mysql_data
+
+networks:
+  backend-net:
+    name: innovatech_backend

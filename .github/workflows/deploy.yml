@@ -1,0 +1,62 @@
+name: CI/CD – Backend Innovatech
+
+on:
+  push:
+    branches: [deploy]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/innovatech-backend-despachos
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login a Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build y Push imagen
+        run: |
+          docker build \
+            -t $ECR_REPO:${{ github.sha }} \
+            -t $ECR_REPO:latest .
+          docker push $ECR_REPO:${{ github.sha }}
+          docker push $ECR_REPO:latest
+
+      - name: Deploy en EC2 Backend
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.EC2_BACKEND_HOST }}
+          username: ec2-user
+          key:      ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            aws ecr get-login-password --region us-east-1 | \
+              docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+            docker pull ${{ env.ECR_REPO }}:latest
+
+            docker stop backend-despachos || true
+            docker rm   backend-despachos || true
+            docker run -d \
+              --name backend-despachos \
+              --restart unless-stopped \
+              --network innovatech_backend \
+              -p 8081:8081 \
+              -e DB_ENDPOINT=mysql-db \
+              -e DB_PORT=3306 \
+              -e DB_NAME=innovatech \
+              -e DB_USERNAME=appuser \
+              -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+              ${{ env.ECR_REPO }}:latest
